@@ -3,7 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 
 // initialize Firebase Admin SDK
 const serviceAccount = JSON.parse(
-  Buffer.from(process.env.FIREBASE_ADMIN_KEY_BASE64, "base64").toString("utf8")
+  Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8")
 );
 
 if (!global._firebaseApp) {

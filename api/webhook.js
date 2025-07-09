@@ -1,30 +1,33 @@
-const express = require("express");
-const bodyParser = require("body-parser");
 const admin = require("firebase-admin");
 
-const app = express();
-app.use(bodyParser.json());
+// Only initialize admin once
+if (!admin.apps.length) {
+  const base64Key = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (!base64Key) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 is not set!");
+  }
+  const serviceAccount = JSON.parse(
+    Buffer.from(base64Key, "base64").toString("utf8")
+  );
 
-// Decode service account key from BASE64
-const base64Key = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-if (!base64Key) {
-  console.error("FIREBASE_SERVICE_ACCOUNT_BASE64 is not set!");
-  process.exit(1);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
 }
-const serviceAccount = JSON.parse(
-  Buffer.from(base64Key, "base64").toString("utf8")
-);
-
-// Initialize Firebase Admin
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
 
 const db = admin.firestore();
 
-app.post("/api/webhook", async (req, res) => {
+export default async function handler(req, res) {
+  if (req.method === "GET") {
+    return res.status(200).send("✅ Server is working");
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method Not Allowed" });
+  }
+
   const queryResult = req.body.queryResult;
-  const intent = queryResult.intent.displayName;
+  const intent = queryResult?.intent?.displayName;
 
   if (intent === "GetClubAnnouncements") {
     try {
@@ -58,14 +61,4 @@ app.post("/api/webhook", async (req, res) => {
   } else {
     return res.json({ fulfillmentText: "I’m not sure how to help with that." });
   }
-});
-
-// ✅ Print server started when running locally
-if (require.main === module) {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`✅ Server started on port ${PORT}`);
-  });
 }
-
-module.exports = app;

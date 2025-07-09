@@ -1,64 +1,60 @@
-import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import admin from "firebase-admin";
+import { NextResponse } from "next/server";
 
-// initialize Firebase Admin SDK
-const serviceAccount = JSON.parse(
-  Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8")
-);
+// 🔷 Decode Base64 service account from env
+const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || "";
+const serviceAccountJson = Buffer.from(serviceAccountBase64, "base64").toString("utf8");
+const serviceAccount = JSON.parse(serviceAccountJson);
 
-if (!global._firebaseApp) {
-  global._firebaseApp = initializeApp({
-    credential: cert(serviceAccount),
+// 🔷 Init Firebase Admin only once
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
   });
 }
 
-const db = getFirestore();
+const db = admin.firestore();
 
-export default async function handler(req, res) {
-  // 🔷 CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+export async function POST(req) {
+  const body = await req.json();
+  const queryText = body?.queryResult?.queryText?.toLowerCase() || "";
+  console.log("👉 User said:", queryText);
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  // Default response
+  let responseText = "🤔 Sorry, I didn’t understand that. Please ask about club or teacher announcements.";
+
+  // Detect type from text
+  let type = null;
+  if (queryText.includes("club")) {
+    type = "club";
+  } else if (queryText.includes("teacher")) {
+    type = "teacher";
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ fulfillmentText: "Method not allowed" });
-  }
-
-  try {
-    const intentName = req.body?.queryResult?.intent?.displayName || "";
-
-    if (intentName !== "GetClubAnnouncements") {
-      return res
-        .status(400)
-        .json({ fulfillmentText: "Unknown intent: " + intentName });
-    }
-
-    const snapshot = await db
-      .collection("announcements")
-      .where("type", "==", "club")
-      .get();
+  if (type) {
+    const snapshot = await db.collection("announcements").where("type", "==", type).get();
 
     if (snapshot.empty) {
-      return res
-        .status(200)
-        .json({ fulfillmentText: "No upcoming club announcements found." });
+      responseText = `🚫 No upcoming ${type} announcements found.`;
+    } else {
+      responseText = `📢 Here are the upcoming ${type} announcements:\n\n`;
+      snapshot.forEach((doc) => {
+        const a = doc.data();
+        responseText += `• *${a.title}* by ${a.authorName}: ${a.description}\n`;
+      });
     }
-
-    let responseText = "📢 Here are the upcoming club announcements:\n\n";
-    snapshot.forEach((doc) => {
-      const a = doc.data();
-      responseText += `🎉 *${a.title}* by ${a.authorName}: ${a.description}\n`;
-    });
-
-    return res.status(200).json({ fulfillmentText: responseText.trim() });
-  } catch (err) {
-    console.error(err);
-    return res
-      .status(500)
-      .json({ fulfillmentText: "Internal server error fetching announcements." });
   }
+
+  return NextResponse.json({ fulfillmentText: responseText });
+}
+
+export function OPTIONS() {
+  return NextResponse.json({}, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    }
+  });
 }

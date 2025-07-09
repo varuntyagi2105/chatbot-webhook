@@ -52,7 +52,7 @@ export async function POST(req) {
       });
     }
   }
-
+//ff
   return NextResponse.json({ fulfillmentText: responseText });
 }
 

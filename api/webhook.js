@@ -1,29 +1,37 @@
 import admin from "firebase-admin";
 import { NextResponse } from "next/server";
 
-// 🔷 Decode Base64 service account from env
-const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || "";
-const serviceAccountJson = Buffer.from(serviceAccountBase64, "base64").toString("utf8");
-const serviceAccount = JSON.parse(serviceAccountJson);
+let db;
 
-// 🔷 Init Firebase Admin only once
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+try {
+  if (!admin.apps.length) {
+    const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    if (!base64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64 env variable!");
+
+    const jsonStr = Buffer.from(base64, "base64").toString("utf8");
+    const serviceAccount = JSON.parse(jsonStr);
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+  }
+
+  db = admin.firestore();
+} catch (err) {
+  console.error("🔥 Firebase init error:", err);
 }
 
-const db = admin.firestore();
-
 export async function POST(req) {
+  if (!db) {
+    return NextResponse.json({ fulfillmentText: "Server misconfigured: Firebase not initialized." }, { status: 500 });
+  }
+
   const body = await req.json();
   const queryText = body?.queryResult?.queryText?.toLowerCase() || "";
   console.log("👉 User said:", queryText);
 
-  // Default response
   let responseText = "🤔 Sorry, I didn’t understand that. Please ask about club or teacher announcements.";
 
-  // Detect type from text
   let type = null;
   if (queryText.includes("club")) {
     type = "club";

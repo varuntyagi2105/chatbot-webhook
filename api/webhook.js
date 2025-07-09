@@ -35,7 +35,6 @@ export default async function handler(req, res) {
       const snapshot = await db
         .collection("announcements")
         .where("type", "==", "club")
-        .where("timestamp", ">", now)
         .orderBy("timestamp", "asc")
         .get();
 

@@ -50,12 +50,16 @@ module.exports = async (req, res) => {
     if (snapshot.empty) {
       responseText = `🚫 No upcoming ${type} announcements found.`;
     } else {
-      responseText = `📢 Here are the upcoming ${type} announcements:\n\n`;
+      responseText = `📢 Here are the upcoming ${type} announcements:\n`;
+
       let count = 1;
 
       snapshot.forEach((doc) => {
         const a = doc.data();
-        responseText += `${count}️⃣ Title: ${a.title}\n    Organizer: ${a.authorName}\n    Description: ${a.description}\n\n`;
+        responseText += `\n${count}️⃣\n`;
+        responseText += `Title: ${a.title}\n`;
+        responseText += `Organizer: ${a.authorName}\n`;
+        responseText += `Description: ${a.description}\n`;
         count++;
       });
     }

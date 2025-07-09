@@ -1,63 +1,64 @@
-const admin = require("firebase-admin");
+import { initializeApp, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
-// Only initialize admin once
-if (!admin.apps.length) {
-  const base64Key = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if (!base64Key) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 is not set!");
-  }
-  const serviceAccount = JSON.parse(
-    Buffer.from(base64Key, "base64").toString("utf8")
-  );
+// initialize Firebase Admin SDK
+const serviceAccount = JSON.parse(
+  Buffer.from(process.env.FIREBASE_ADMIN_KEY_BASE64, "base64").toString("utf8")
+);
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+if (!global._firebaseApp) {
+  global._firebaseApp = initializeApp({
+    credential: cert(serviceAccount),
   });
 }
 
-const db = admin.firestore();
+const db = getFirestore();
 
 export default async function handler(req, res) {
-  if (req.method === "GET") {
-    return res.status(200).send("✅ Server is working");
+  // 🔷 CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method Not Allowed" });
+    return res.status(405).json({ fulfillmentText: "Method not allowed" });
   }
 
-  const queryResult = req.body.queryResult;
-  const intent = queryResult?.intent?.displayName;
+  try {
+    const intentName = req.body?.queryResult?.intent?.displayName || "";
 
-  if (intent === "GetClubAnnouncements") {
-    try {
-      const now = Date.now();
-      const snapshot = await db
-        .collection("announcements")
-        .where("type", "==", "club")
-        .orderBy("timestamp", "asc")
-        .get();
-
-      if (snapshot.empty) {
-        return res.json({
-          fulfillmentText: "There are no upcoming club announcements at the moment.",
-        });
-      }
-
-      let responseText = "📢 Here are the upcoming club announcements:\n";
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        responseText += `\n🎉 *${data.title}* by ${data.authorName}: ${data.description}`;
-      });
-
-      return res.json({ fulfillmentText: responseText });
-    } catch (err) {
-      console.error(err);
-      return res.json({
-        fulfillmentText: "Sorry, I couldn't fetch the club announcements due to an error.",
-      });
+    if (intentName !== "GetClubAnnouncements") {
+      return res
+        .status(400)
+        .json({ fulfillmentText: "Unknown intent: " + intentName });
     }
-  } else {
-    return res.json({ fulfillmentText: "I’m not sure how to help with that." });
+
+    const snapshot = await db
+      .collection("announcements")
+      .where("type", "==", "club")
+      .get();
+
+    if (snapshot.empty) {
+      return res
+        .status(200)
+        .json({ fulfillmentText: "No upcoming club announcements found." });
+    }
+
+    let responseText = "📢 Here are the upcoming club announcements:\n\n";
+    snapshot.forEach((doc) => {
+      const a = doc.data();
+      responseText += `🎉 *${a.title}* by ${a.authorName}: ${a.description}\n`;
+    });
+
+    return res.status(200).json({ fulfillmentText: responseText.trim() });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ fulfillmentText: "Internal server error fetching announcements." });
   }
 }
